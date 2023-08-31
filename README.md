@@ -5,6 +5,10 @@ Follow the "Build from source code" section in [this document](https://geth.ethe
 ## Specific steps for Windows
 
 Follow the "Build from source code"\"Windows" section in [this document](https://geth.ethereum.org/docs/getting-started/installing-geth).
+if you see errors like "missing go.sum entry for module ...", run this command
+```shell
+go mod tidy
+```
 
 ### Check if geth is successfully built
 ```shell

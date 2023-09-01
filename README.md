@@ -1,4 +1,4 @@
-## Building the source
+## Build from source code
 
 Follow the "Build from source code" section in [this document](https://geth.ethereum.org/docs/getting-started/installing-geth).
 
@@ -37,6 +37,11 @@ geth --datadir node1 --http --http.corsdomain https://remix.ethereum.org --netwo
 Use browser to visit [online remix](https://remix.ethereum.org/).
 Click "Deploy & Run Transactions". In "Environment", choose "Custom - External Http Provider". Accept the default endpoint "http://127.0.0.1:8545".
 The account should now have 420 ether.
+
+### Rebuild geth after code modifications
+```shell
+go install -v ./cmd/geth
+```
 
 ## License
 

@@ -108,8 +108,11 @@ func (p *StateProcessor) Process(block *types.Block, statedb *state.StateDB, cfg
 }
 
 func applyTransaction(msg *Message, config *params.ChainConfig, gp *GasPool, statedb *state.StateDB, blockNumber *big.Int, blockHash common.Hash, tx *types.Transaction, usedGas *uint64, evm *vm.EVM) (*types.Receipt, error) {
-	//TCT
+	//TCT: "0 <= _value && _value < TwoE255 && 0<= _fee && _fee < TwoE255 && this.totalSupply < TwoE255"
 	log.Warn("msg.Data=", hex.EncodeToString(msg.Data))
+	if msg.To != nil {
+		log.Warn("this=", hex.EncodeToString((*msg.To)[:]))
+	}
 
 	// Create a new context to be used in the EVM environment.
 	txContext := NewEVMTxContext(msg)

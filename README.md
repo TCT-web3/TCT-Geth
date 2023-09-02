@@ -2,9 +2,18 @@
 
 Follow the "Build from source code" section in [this document](https://geth.ethereum.org/docs/getting-started/installing-geth).
 
-## Specific steps for Windows
+## 1. Specific steps for Windows
 
 Follow the "Build from source code"\"Windows" section in [this document](https://geth.ethereum.org/docs/getting-started/installing-geth).
+
+```shell
+$ make geth
+```
+to start the geth,
+```shell
+$ ./build/bin/geth
+```
+
 if you see errors like "missing go.sum entry for module ...", run this command
 ```shell
 go mod tidy
@@ -42,6 +51,9 @@ The account should now have 420 ether.
 ```shell
 go install -v ./cmd/geth
 ```
+
+## 2. New features of TCT-geth
+More details are in [Development Readme](develop.md).
 
 ## License
 

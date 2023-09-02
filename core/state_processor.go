@@ -21,7 +21,7 @@ import (
 	"fmt"
 	"math/big"
 
-	"encoding/hex"
+	"encoding/binary"
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/consensus"
@@ -107,15 +107,22 @@ func (p *StateProcessor) Process(block *types.Block, statedb *state.StateDB, cfg
 	return receipts, allLogs, *usedGas, nil
 }
 
+var transferProxy_selector = binary.BigEndian.Uint32([]byte{0xcf, 0x05, 0x3d, 0x9d}) // 0xcf053d9d
+
 func applyTransaction(msg *Message, config *params.ChainConfig, gp *GasPool, statedb *state.StateDB, blockNumber *big.Int, blockHash common.Hash, tx *types.Transaction, usedGas *uint64, evm *vm.EVM) (*types.Receipt, error) {
 	//TCT: "0 <= _value && _value < TwoE255 && 0<= _fee && _fee < TwoE255 && this.totalSupply < TwoE255"
 	if msg.To != nil {
-		log.Warn("msg.Data=", hex.EncodeToString(msg.Data))
-		log.Warn("this=", hex.EncodeToString((*msg.To)[:]))
-		slot := common.HexToHash("0x1")
-		log.Warn("slot=", hex.EncodeToString(slot[:]))
-		this_totalSupply := statedb.GetState(*msg.To, slot)
-		log.Warn("this.totalSupply=", hex.EncodeToString(this_totalSupply[:]))
+		//log.Warn("msg.Data=", hex.EncodeToString(msg.Data))
+		//log.Warn("this=", hex.EncodeToString((*msg.To)[:]))
+		function_selector := binary.BigEndian.Uint32(msg.Data[0:8])
+		log.Warn(fmt.Sprintf("function_selector=%x", function_selector))
+		log.Warn(fmt.Sprintf("transferProxy_selector=%x", transferProxy_selector))
+		if function_selector == transferProxy_selector {
+			slot := common.BytesToHash([]byte{0x01})
+			this_totalSupply_bytes := statedb.GetState(*msg.To, slot)
+			this_totalSupply := binary.BigEndian.Uint64(this_totalSupply_bytes[24:])
+			log.Warn(fmt.Sprintf("this.totalSupply=%d", this_totalSupply))
+		}
 	}
 
 	// Create a new context to be used in the EVM environment.

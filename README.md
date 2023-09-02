@@ -26,7 +26,7 @@ where geth
 
 ### One-time setup
 ```shell
-xcopy [repo-dir]\TCT-Geth-1\TCTchain d:\TCTchain /I
+xcopy [repo-dir]\TCTchain d:\TCTchain /I
 cd d:\TCTchain
 d:
 geth account new --datadir node1

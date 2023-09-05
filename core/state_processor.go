@@ -20,6 +20,7 @@ import (
 	"errors"
 	"fmt"
 	"math/big"
+	"time"
 
 	"encoding/binary"
 
@@ -108,22 +109,36 @@ func (p *StateProcessor) Process(block *types.Block, statedb *state.StateDB, cfg
 }
 
 var transferProxy_selector = binary.BigEndian.Uint32([]byte{0xcf, 0x05, 0x3d, 0x9d}) // 0xcf053d9d
+var TwoE255 = new(big.Int).Lsh(common.Big1, 255)
 
 func applyTransaction(msg *Message, config *params.ChainConfig, gp *GasPool, statedb *state.StateDB, blockNumber *big.Int, blockHash common.Hash, tx *types.Transaction, usedGas *uint64, evm *vm.EVM) (*types.Receipt, error) {
 	//TCT: "0 <= _value && _value < TwoE255 && 0<= _fee && _fee < TwoE255 && this.totalSupply < TwoE255"
+	var start_time, end_time time.Time
+
+	var checking_end_time time.Time
+	var arg_value, arg_fee, this_totalSupply common.Hash
 	if msg.To != nil {
 		//log.Warn("msg.Data=", hex.EncodeToString(msg.Data))
-		//log.Warn("this=", hex.EncodeToString((*msg.To)[:]))
-		function_selector := binary.BigEndian.Uint32(msg.Data[0:8])
-		log.Warn(fmt.Sprintf("function_selector=%x", function_selector))
-		log.Warn(fmt.Sprintf("transferProxy_selector=%x", transferProxy_selector))
+		function_selector := binary.BigEndian.Uint32(msg.Data[0:4])
 		if function_selector == transferProxy_selector {
 			slot := common.BytesToHash([]byte{0x01})
+			time1 := time.Now()
 			this_totalSupply_bytes := statedb.GetState(*msg.To, slot)
-			this_totalSupply := binary.BigEndian.Uint64(this_totalSupply_bytes[24:])
-			log.Warn(fmt.Sprintf("this.totalSupply=%d", this_totalSupply))
+			log.Warn(fmt.Sprintf("load_time=%d", time.Now().UnixNano()-time1.UnixNano()))
+			start_time = time.Now()
+			for i := 0; i < 1000000; i++ {
+				function_selector = binary.BigEndian.Uint32(msg.Data[0:4])
+				arg_value = common.BytesToHash(msg.Data[4+32*2 : 4+32*3])
+				arg_fee = common.BytesToHash(msg.Data[4+32*3 : 4+32*4])
+				this_totalSupply_bytes = statedb.GetState(*msg.To, slot)
+				this_totalSupply = common.BytesToHash(this_totalSupply_bytes[:])
+			}
+			checking_end_time = time.Now()
+			log.Warn(fmt.Sprintf("checking_time*1000000=%d", checking_end_time.UnixNano()-start_time.UnixNano()))
 		}
 	}
+	start_time = time.Now()
+	log.Warn(fmt.Sprintf("start_time=%d", start_time.UnixNano()))
 
 	// Create a new context to be used in the EVM environment.
 	txContext := NewEVMTxContext(msg)
@@ -169,6 +184,19 @@ func applyTransaction(msg *Message, config *params.ChainConfig, gp *GasPool, sta
 	receipt.BlockHash = blockHash
 	receipt.BlockNumber = blockNumber
 	receipt.TransactionIndex = uint(statedb.TxIndex())
+
+	//TCT
+	if msg.To != nil {
+		end_time = time.Now()
+		//tx_apply_time := time.Since(checking_end_time).Nanoseconds()
+		total_time := end_time.UnixNano() - start_time.UnixNano()
+		log.Warn(fmt.Sprintf("end_time=%d", end_time.UnixNano()))
+		log.Warn(fmt.Sprintf("total_time=%d", total_time))
+		//log.Warn(fmt.Sprintf("total_time=%d  tx_apply_time=%d foo=%d", total_time, tx_apply_time, 1))
+		log.Warn("_value=", arg_value.Hex())
+		log.Warn("_fee=", arg_fee.Hex())
+		log.Warn("this.totalSupply=", this_totalSupply.Hex())
+	}
 	return receipt, err
 }
 

@@ -3,46 +3,65 @@
 Follow the "Build from source code" section in [this document](https://geth.ethereum.org/docs/getting-started/installing-geth).
 
 ## 1. Specific steps for Windows
-
 Follow the "Build from source code"\"Windows" section in [this document](https://geth.ethereum.org/docs/getting-started/installing-geth), if you see errors like "missing go.sum entry for module ...", run this command
 ```shell
-go mod tidy
+> go mod tidy
 ```
 
 ### Check if geth is successfully built
 ```shell
-where geth
+> where geth
 ```
 
 ### One-time setup
 ```shell
-xcopy [repo-dir]\TCTchain d:\TCTchain /I
-cd d:\TCTchain
-d:
-geth account new --datadir node1
+> xcopy [repo-dir]\TCTchain d:\TCTchain /I
+> cd d:\TCTchain
+> d:
+> geth account new --datadir node1
 ```
 When asked for password, use "a1" as the password, which is stored in pwd.txt.
-Copy the created address, e.g, 0x3a12DBb7B3C8aB6e927F869A04Ea9F9596F2ce07. Paste the address into extradata and alloc of PoA-genesis.json.
+Copy the created address, e.g, 0x3a12DBb7B3C8aB6e927F869A04Ea9F9596F2ce07. Paste the address into extradata and alloc of [PoA-genesis.json](TCTchain/PoA-genesis.json)
 ```shell
-geth init --datadir node1 PoA-genesis.json
+> geth init --datadir node1 PoA-genesis.json
 ```
 
 ### Run geth with miner
 ```shell
-geth --datadir node1 --http --http.corsdomain https://remix.ethereum.org --networkid 12345 --vmdebug --allow-insecure-unlock --password pwd.txt --unlock "0x3a12DBb7B3C8aB6e927F869A04Ea9F9596F2ce07" --mine --miner.etherbase "0x3a12DBb7B3C8aB6e927F869A04Ea9F9596F2ce07"
+> geth --datadir node1 --http --http.corsdomain https://remix.ethereum.org --networkid 12345 --vmdebug --allow-insecure-unlock --password pwd.txt --unlock "0x3a12DBb7B3C8aB6e927F869A04Ea9F9596F2ce07" --mine --miner.etherbase "0x3a12DBb7B3C8aB6e927F869A04Ea9F9596F2ce07"
 ```
 
 ### Interact with geth
-Use browser to visit [online remix](https://remix.ethereum.org/).
-Click "Deploy & Run Transactions". In "Environment", choose "Custom - External Http Provider". Accept the default endpoint "http://127.0.0.1:8545".
-The account should now have 420 ether.
+Use browser to visit [online remix](https://remix.ethereum.org/). Click `Deploy & Run Transactions`. In `Environment`, choose `Custom - External Http Provider`. Accept the default endpoint `http://127.0.0.1:8545`. The account should now have 420 ether.
 
 ### Rebuild geth after code modifications
 ```shell
 go install -v ./cmd/geth
 ```
 
-## 2. New features of TCT-geth
+## 2. Specific steps for Linux
+Follow the `Build from source code\Linux` section in [this document](https://geth.ethereum.org/docs/getting-started/installing-geth)
+```shell
+$ make geth
+```
+to start the geth,
+```shell
+$ ./build/bin/geth
+```
+
+entering into `TCTchain` folder, and init the chain setttings:
+```shell
+$ cd TCTchain
+$ geth account new --datadir node1
+$ geth init --datadir node1 PoA-genesis.json
+```
+
+and then run the geth:
+```shell
+$ geth --datadir node1 --http --http.corsdomain https://remix.ethereum.org --networkid 12345 --vmdebug --allow-insecure-unlock --password pwd.txt --unlock "0x3a12DBb7B3C8aB6e927F869A04Ea9F9596F2ce07" --mine --miner.etherbase "0x3a12DBb7B3C8aB6e927F869A04Ea9F9596F2ce07"
+```
+
+## 3. New features of TCT-geth
 More details are in [Development Readme](develop.md).
 
 ## License

@@ -81,4 +81,9 @@ Given the hypothesis file [here](https://github.com/TCT-web3/demo/tree/aug2023/w
 ```
 sometimes, we have to access state variables (such as `this.totalSupply`) in the contract we are interacting with.
 
-First, we could know the storage layout of contract given [this](https://docs.soliditylang.org/en/latest/internals/layout_in_storage.html). When we know the offset and slot of the specific variable, we could use `eth_getstorageat()` [refer](https://ethereum.org/en/developers/docs/apis/json-rpc/#eth_getstorageat) to get the value of particular variable.
+First, we could know the storage layout of contract given [this](https://docs.soliditylang.org/en/latest/internals/layout_in_storage.html). When we know the offset and slot of the specific variable, we could use `eth_getstorageat()` [refer](https://ethereum.org/en/developers/docs/apis/json-rpc/#eth_getstorageat) to get the value of particular variable. More details about how to get state variable and mapping struct are [referred here](https://medium.com/@dariusdev/how-to-read-ethereum-contract-storage-44252c8af925).
+
+since `applyTransaction()` is the entry point right before a tx is executed by evm, we implement feature 2 [here](core/state_processor.go#L114).
+
+## Feature 3: path hash
+To get the hash of evm code execution trace in geth client.

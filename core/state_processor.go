@@ -23,6 +23,7 @@ import (
 	"time"
 
 	"encoding/binary"
+	"encoding/hex"
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/consensus"
@@ -108,33 +109,104 @@ func (p *StateProcessor) Process(block *types.Block, statedb *state.StateDB, cfg
 	return receipts, allLogs, *usedGas, nil
 }
 
-var transferProxy_selector = binary.BigEndian.Uint32([]byte{0xcf, 0x05, 0x3d, 0x9d}) // 0xcf053d9d
+var transferProxy_selector = binary.BigEndian.Uint32([]byte{0xcf, 0x05, 0x3d, 0x9d})            // 0xcf053d9d
+var swapExactTokensForTokens_selector = binary.BigEndian.Uint32([]byte{0x47, 0x2b, 0x43, 0xf3}) // 0x472b43f3
 var TwoE255 = new(big.Int).Lsh(common.Big1, 255)
 
 func applyTransaction(msg *Message, config *params.ChainConfig, gp *GasPool, statedb *state.StateDB, blockNumber *big.Int, blockHash common.Hash, tx *types.Transaction, usedGas *uint64, evm *vm.EVM) (*types.Receipt, error) {
-	//TCT: "0 <= _value && _value < TwoE255 && 0<= _fee && _fee < TwoE255 && this.totalSupply < TwoE255"
 	var start_time, end_time time.Time
 
+	var satisfied bool
 	var checking_end_time time.Time
 	var arg_value, arg_fee, this_totalSupply common.Hash
+
 	if msg.To != nil {
-		//log.Warn("msg.Data=", hex.EncodeToString(msg.Data))
+		log.Warn("msg.Data=", hex.EncodeToString(msg.Data))
 		function_selector := binary.BigEndian.Uint32(msg.Data[0:4])
 		if function_selector == transferProxy_selector {
+			//Hypothesis: "0 <= _value && _value < TwoE255 && 0<= _fee && _fee < TwoE255 && this.totalSupply < TwoE255"
 			slot := common.BytesToHash([]byte{0x01})
-			time1 := time.Now()
-			this_totalSupply_bytes := statedb.GetState(*msg.To, slot)
-			log.Warn(fmt.Sprintf("load_time=%d", time.Now().UnixNano()-time1.UnixNano()))
+			//time1 := time.Now()
+			//this_totalSupply_bytes = statedb.GetState(*msg.To, slot)
+			//log.Warn(fmt.Sprintf("load_time=%d", time.Now().UnixNano()-time1.UnixNano()))
 			start_time = time.Now()
 			for i := 0; i < 1000000; i++ {
 				function_selector = binary.BigEndian.Uint32(msg.Data[0:4])
 				arg_value = common.BytesToHash(msg.Data[4+32*2 : 4+32*3])
+				_value := new(big.Int).SetBytes(arg_value[:])
 				arg_fee = common.BytesToHash(msg.Data[4+32*3 : 4+32*4])
-				this_totalSupply_bytes = statedb.GetState(*msg.To, slot)
-				this_totalSupply = common.BytesToHash(this_totalSupply_bytes[:])
+				_fee := new(big.Int).SetBytes(arg_fee[:])
+				this_totalSupply = statedb.GetState(*msg.To, slot)
+				_this_totalSupply := new(big.Int).SetBytes(this_totalSupply[:])
+				satisfied = _value.Cmp(TwoE255) < 0 && _fee.Cmp(TwoE255) < 0 && _this_totalSupply.Cmp(TwoE255) < 0
 			}
 			checking_end_time = time.Now()
-			log.Warn(fmt.Sprintf("checking_time*1000000=%d", checking_end_time.UnixNano()-start_time.UnixNano()))
+			log.Warn(fmt.Sprintf("checking_time*1000000=%d satisfied=%v", checking_end_time.UnixNano()-start_time.UnixNano(), satisfied))
+			log.Warn("_value=", arg_value.Hex())
+			log.Warn("_fee=", arg_fee.Hex())
+			log.Warn("this.totalSupply=", this_totalSupply.Hex())
+		} else if function_selector == swapExactTokensForTokens_selector {
+			// "to != pair", "tx_origin != pair", "pair.reserve0 == tokenB.balanceOf[pair]", "pair.reserve1 == tokenA.balanceOf[pair]",
+			// "tokenB.totalSupply < TwoE255", "tokenA.totalSupply < TwoE255", "pair.token0 == tokenB", "pair.token1 == tokenA"
+			slot_of_getPair := []byte{
+				0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+				0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+				0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+				0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02}
+			slot_of_balanceOf := []byte{
+				0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+				0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+				0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+				0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01}
+			arg_tokenA := msg.Data[0xa4:0xc4]
+			arg_tokenB := msg.Data[0xc4:0xe4]
+			slot := common.BytesToHash([]byte{0x00}) // slot of _factory
+			this_factory := statedb.GetState(*msg.To, slot)
+			_this_factory := new(big.Int).SetBytes(this_factory[:])
+			slot = crypto.Keccak256Hash(arg_tokenA, slot_of_getPair)
+			slot = crypto.Keccak256Hash(arg_tokenB, slot[:])
+			pair := statedb.GetState(common.BytesToAddress(_this_factory.Bytes()), slot)
+			tx_origin := new(big.Int).SetBytes(msg.From[:])
+			_to := new(big.Int).SetBytes(msg.Data[0x64:0x84][:])
+			slot = common.BytesToHash([]byte{0x08}) // slot of reserve0
+			pair_reserve0 := statedb.GetState(common.BytesToAddress(pair.Bytes()), slot)
+			slot = common.BytesToHash([]byte{0x09}) // slot of reserve1
+			pair_reserve1 := statedb.GetState(common.BytesToAddress(pair.Bytes()), slot)
+			slot = crypto.Keccak256Hash(pair[:], slot_of_balanceOf)
+			tokenA_bal_pair := statedb.GetState(common.BytesToAddress(arg_tokenA), slot)
+			tokenB_bal_pair := statedb.GetState(common.BytesToAddress(arg_tokenB), slot)
+
+			start_time = time.Now()
+			for i := 0; i < 1000000; i++ {
+				function_selector = binary.BigEndian.Uint32(msg.Data[0:4])
+				arg_tokenA := msg.Data[0xa4:0xc4]
+				arg_tokenB := msg.Data[0xc4:0xe4]
+				slot := common.BytesToHash([]byte{0x00}) // slot of _factory
+				this_factory := statedb.GetState(*msg.To, slot)
+				_this_factory := new(big.Int).SetBytes(this_factory[:])
+				slot = crypto.Keccak256Hash(arg_tokenA, slot_of_getPair)
+				slot = crypto.Keccak256Hash(arg_tokenB, slot[:])
+				pair := statedb.GetState(common.BytesToAddress(_this_factory.Bytes()), slot)
+				tx_origin = new(big.Int).SetBytes(msg.From[:])
+				_to = new(big.Int).SetBytes(msg.Data[0x64:0x84][:])
+				slot = common.BytesToHash([]byte{0x08}) // slot of reserve0
+				pair_reserve0 = statedb.GetState(common.BytesToAddress(pair.Bytes()), slot)
+				slot = common.BytesToHash([]byte{0x09}) // slot of reserve1
+				pair_reserve1 = statedb.GetState(common.BytesToAddress(pair.Bytes()), slot)
+				slot = crypto.Keccak256Hash(pair[:], slot_of_balanceOf)
+				tokenA_bal_pair = statedb.GetState(common.BytesToAddress(arg_tokenA), slot)
+				tokenB_bal_pair = statedb.GetState(common.BytesToAddress(arg_tokenB), slot)
+			}
+			checking_end_time = time.Now()
+			log.Warn(fmt.Sprintf("checking_time*1000000=%d satisfied=%v", checking_end_time.UnixNano()-start_time.UnixNano(), satisfied))
+			log.Warn("tx_origin=", common.BytesToHash(tx_origin.Bytes()).Hex())
+			log.Warn("_to=", common.BytesToHash(_to.Bytes()).Hex())
+			log.Warn("pair_reserve0=", common.BytesToHash(pair_reserve0[:]).Hex())
+			log.Warn("pair_reserve1=", common.BytesToHash(pair_reserve1[:]).Hex())
+			log.Warn("tokenA.balanceOf[pair]=", common.BytesToHash(tokenA_bal_pair[:]).Hex())
+			log.Warn("tokenB.balanceOf[pair]=", common.BytesToHash(tokenB_bal_pair[:]).Hex())
+			log.Warn("this_factory=", this_factory.Hex())
+			log.Warn("pair=", common.BytesToHash(pair[:]).Hex())
 		}
 	}
 	start_time = time.Now()
@@ -193,9 +265,6 @@ func applyTransaction(msg *Message, config *params.ChainConfig, gp *GasPool, sta
 		log.Warn(fmt.Sprintf("end_time=%d", end_time.UnixNano()))
 		log.Warn(fmt.Sprintf("total_time=%d", total_time))
 		//log.Warn(fmt.Sprintf("total_time=%d  tx_apply_time=%d foo=%d", total_time, tx_apply_time, 1))
-		log.Warn("_value=", arg_value.Hex())
-		log.Warn("_fee=", arg_fee.Hex())
-		log.Warn("this.totalSupply=", this_totalSupply.Hex())
 	}
 	return receipt, err
 }

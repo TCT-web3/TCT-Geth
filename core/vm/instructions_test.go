@@ -641,6 +641,9 @@ func BenchmarkOpKeccak256(bench *testing.B) {
 		stack.push(start)
 		opKeccak256(&pc, evmInterpreter, &ScopeContext{mem, stack, nil})
 	}
+
+	fmt.Println("interpreter hasher: ", env.interpreter.hasher)
+	fmt.Println("hasher buf: ", env.interpreter.hasherBuf)
 }
 
 func TestCreate2Addreses(t *testing.T) {

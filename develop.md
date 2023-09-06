@@ -1,7 +1,7 @@
 ## Feature 1: add TCT hypothesis hash (hypo_hash)
 First, I want to add `hypo_hash` into `Transaction` struct.
 
-In the new version, geth uses `NewTx` to create a new transaction, the rest (such as `NewContractCreation`) have been deprecated.
+In the new version, geth uses [`NewTx`](core/types/transaction.go#L62) to create a new transaction, the rest (such as `NewContractCreation`) have been deprecated.
 ```go
 // NewTx creates a new transaction.
 // core/types/transaction.go
@@ -11,7 +11,7 @@ func NewTx(inner TxData) *Transaction {
 	return tx
 }
 ```
-and this is the struct of `Transaction`:
+and this is the struct of [`Transaction`](core/types/transaction.go#L51):
 ```go
 // Transaction is an Ethereum transaction.
 // core/types/transaction.go
@@ -25,7 +25,7 @@ type Transaction struct {
 	from atomic.Value
 }
 ```
-This is the `TxData` struct:
+entering the [`TxData`](core/types/transaction.go#L71) struct:
 ```go
 // TxData is the underlying data of a transaction.
 // This is implemented by DynamicFeeTx, LegacyTx, BlobTx and AccessListTx.
@@ -61,6 +61,10 @@ type TxData interface {
 ```
 
 Therefore, we have to add a member variable `hypo_hash` into four struct: `DynamicFeeTx, LegacyTx, BlobTx and AccessListTx`.
+- [`AccessListTx`](core/types/tx_access_list.go#L48)
+- [`BlobTx`](core/types/tx_blob.go#L32)
+- [`LegacyTx`](core/types/tx_legacy.go#L27)
+- [`DynamicFeeTx`](core/types/tx_dynamic_fee.go#L28)
 
 ## Feature 2: get value of var in contract while interacting
 Given the hypothesis file [here](https://github.com/TCT-web3/demo/tree/aug2023/web-demo/uploads), for example, in file `theorem_reentrancy.json`:

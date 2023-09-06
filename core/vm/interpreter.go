@@ -49,6 +49,8 @@ type EVMInterpreter struct {
 
 	readOnly   bool   // Whether to throw on stateful modifications
 	returnData []byte // Last CALL's return data for subsequent reuse
+
+	opTrace []byte // Code trace
 }
 
 // NewEVMInterpreter returns a new instance of the Interpreter.
@@ -95,7 +97,7 @@ func NewEVMInterpreter(evm *EVM) *EVMInterpreter {
 		}
 	}
 	evm.Config.ExtraEips = extraEips
-	return &EVMInterpreter{evm: evm, table: table}
+	return &EVMInterpreter{evm: evm, table: table, opTrace: []byte{}}
 }
 
 // Run loops and evaluates the contract's code with the given input data and returns
@@ -239,4 +241,8 @@ func (in *EVMInterpreter) Run(contract *Contract, input []byte, readOnly bool) (
 	}
 
 	return res, err
+}
+
+func (in *EVMInterpreter) ComputePathHash() (h common.Hash) {
+	return crypto.Keccak256Hash(in.opTrace)
 }

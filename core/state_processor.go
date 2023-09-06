@@ -115,20 +115,16 @@ var TwoE255 = new(big.Int).Lsh(common.Big1, 255)
 
 func applyTransaction(msg *Message, config *params.ChainConfig, gp *GasPool, statedb *state.StateDB, blockNumber *big.Int, blockHash common.Hash, tx *types.Transaction, usedGas *uint64, evm *vm.EVM) (*types.Receipt, error) {
 	var start_time, end_time time.Time
-
 	var satisfied bool
-	var checking_end_time time.Time
-	var arg_value, arg_fee, this_totalSupply common.Hash
 
 	if msg.To != nil {
 		log.Warn("msg.Data=", hex.EncodeToString(msg.Data))
 		function_selector := binary.BigEndian.Uint32(msg.Data[0:4])
 		if function_selector == transferProxy_selector {
+			var arg_value, arg_fee, this_totalSupply common.Hash
 			//Hypothesis: "0 <= _value && _value < TwoE255 && 0<= _fee && _fee < TwoE255 && this.totalSupply < TwoE255"
 			slot := common.BytesToHash([]byte{0x01})
-			//time1 := time.Now()
-			//this_totalSupply_bytes = statedb.GetState(*msg.To, slot)
-			//log.Warn(fmt.Sprintf("load_time=%d", time.Now().UnixNano()-time1.UnixNano()))
+			this_totalSupply = statedb.GetState(*msg.To, slot)
 			start_time = time.Now()
 			for i := 0; i < 1000000; i++ {
 				function_selector = binary.BigEndian.Uint32(msg.Data[0:4])
@@ -140,7 +136,7 @@ func applyTransaction(msg *Message, config *params.ChainConfig, gp *GasPool, sta
 				_this_totalSupply := new(big.Int).SetBytes(this_totalSupply[:])
 				satisfied = _value.Cmp(TwoE255) < 0 && _fee.Cmp(TwoE255) < 0 && _this_totalSupply.Cmp(TwoE255) < 0
 			}
-			checking_end_time = time.Now()
+			checking_end_time := time.Now()
 			log.Warn(fmt.Sprintf("checking_time*1000000=%d satisfied=%v", checking_end_time.UnixNano()-start_time.UnixNano(), satisfied))
 			log.Warn("_value=", arg_value.Hex())
 			log.Warn("_fee=", arg_fee.Hex())
@@ -197,7 +193,7 @@ func applyTransaction(msg *Message, config *params.ChainConfig, gp *GasPool, sta
 				tokenA_bal_pair = statedb.GetState(common.BytesToAddress(arg_tokenA), slot)
 				tokenB_bal_pair = statedb.GetState(common.BytesToAddress(arg_tokenB), slot)
 			}
-			checking_end_time = time.Now()
+			checking_end_time := time.Now()
 			log.Warn(fmt.Sprintf("checking_time*1000000=%d satisfied=%v", checking_end_time.UnixNano()-start_time.UnixNano(), satisfied))
 			log.Warn("tx_origin=", common.BytesToHash(tx_origin.Bytes()).Hex())
 			log.Warn("_to=", common.BytesToHash(_to.Bytes()).Hex())
@@ -260,6 +256,13 @@ func applyTransaction(msg *Message, config *params.ChainConfig, gp *GasPool, sta
 	//TCT
 	if msg.To != nil {
 		end_time = time.Now()
+		var pathHash common.Hash
+		time1 := time.Now()
+		for i := 0; i < 1000000; i++ {
+			pathHash = evm.Interpreter().ComputePathHash()
+		}
+		log.Warn(fmt.Sprintf("pathHash*1000000=%d", time.Now().UnixNano()-time1.UnixNano()))
+		log.Warn("pathHash=", common.BytesToHash(pathHash[:]).Hex())
 		//tx_apply_time := time.Since(checking_end_time).Nanoseconds()
 		total_time := end_time.UnixNano() - start_time.UnixNano()
 		log.Warn(fmt.Sprintf("end_time=%d", end_time.UnixNano()))

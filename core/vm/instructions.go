@@ -551,10 +551,16 @@ func opJumpi(pc *uint64, interpreter *EVMInterpreter, scope *ScopeContext) ([]by
 		if !scope.Contract.validJumpdest(&pos) {
 			return nil, ErrInvalidJump
 		}
-		byteSlice := make([]byte, 4) // 4 bytes for a uint32
-		binary.LittleEndian.PutUint32(byteSlice, uint32(*pc))
-		interpreter.opTrace = append(interpreter.opTrace, byteSlice...) //For TCT
-		*pc = pos.Uint64() - 1                                          // pc will be increased by the interpreter loop
+		if *pc >= 2^16 { //For TCT
+			byteSlice := make([]byte, 4) // 4 bytes for a uint32
+			binary.LittleEndian.PutUint32(byteSlice, uint32(*pc))
+			interpreter.opTrace = append(interpreter.opTrace, byteSlice...)
+		} else {
+			byteSlice := make([]byte, 2) // 2 bytes for a uint16
+			binary.LittleEndian.PutUint16(byteSlice, uint16(*pc))
+			interpreter.opTrace = append(interpreter.opTrace, byteSlice...)
+		}
+		*pc = pos.Uint64() - 1 // pc will be increased by the interpreter loop
 	}
 	return nil, nil
 }

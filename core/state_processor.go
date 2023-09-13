@@ -122,7 +122,8 @@ func applyTransaction(msg *Message, config *params.ChainConfig, gp *GasPool, sta
 	}
 
 	// TCT: get hypothesis given hypoHash
-	hypoHash := common.Hash{0x1}
+	// example like this: hypoHash := common.Hash{0x1}
+	hypoHash := tx.HypoHash // transaction carries the hash
 	hypothesis, err := retrieveHypoHash(hypoHash)
 	if err != nil {
 		log.Warn("The hypothesis does not find given ", hypoHash)

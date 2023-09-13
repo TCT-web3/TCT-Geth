@@ -1,5 +1,5 @@
 ## Feature 1: add TCT hypothesis hash (hypo_hash)
-First, I want to add `hypo_hash` into `Transaction` struct.
+First, I want to add `hypo_hash` into `Transaction` struct. The analysis is as follows:
 
 In the new version, geth uses [`NewTx`](core/types/transaction.go#L62) to create a new transaction, the rest (such as `NewContractCreation`) have been deprecated.
 ```go
@@ -66,7 +66,7 @@ Therefore, we have to add a member variable `hypo_hash` into four struct: `Dynam
 - [`LegacyTx`](core/types/tx_legacy.go#L27)
 - [`DynamicFeeTx`](core/types/tx_dynamic_fee.go#L28)
 
-Finally, simplistic hypoHash is added before a transaction is executed in evm which is in `applyTransaction` function. More details can be found in [retrieveHypoHash](core/state_processor.go#L354). Future plan is that we might deploy a hypothesis service on IPFS and retireve from IPFS.
+Finally, simplistic `hypoHash` is added before a transaction is executed in evm which is in `applyTransaction` function and `Hypohash` is carried with transaction in [`transaction.go`](core/types/transaction.go#L51). More details can be found in [retrieveHypoHash](core/state_processor.go#L354). Future plan is that we might deploy a hypothesis service on IPFS/Infura and retireve from IPFS/Infura.
 
 ## Feature 2: get value of var in contract while interacting
 Given the hypothesis file [here](https://github.com/TCT-web3/demo/tree/aug2023/web-demo/uploads), for example, in file `theorem_reentrancy.json`:

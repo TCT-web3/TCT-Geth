@@ -17,6 +17,7 @@
 package core
 
 import (
+	"bytes"
 	"errors"
 	"fmt"
 	"math/big"
@@ -111,13 +112,19 @@ func (p *StateProcessor) Process(block *types.Block, statedb *state.StateDB, cfg
 
 func applyTransaction(msg *Message, config *params.ChainConfig, gp *GasPool, statedb *state.StateDB, blockNumber *big.Int, blockHash common.Hash, tx *types.Transaction, usedGas *uint64, evm *vm.EVM) (*types.Receipt, error) {
 	var start_time, end_time time.Time
-	if msg.To != nil {
+	if msg.To != nil /*&& false*/ {
 		log.Warn("msg.Data=", hex.EncodeToString(msg.Data))
 		function_selector := binary.BigEndian.Uint32(msg.Data[0:4])
 		if function_selector == transferProxy_selector {
 			checkHypo_transferProxy(msg, statedb)
 		} else if function_selector == swapExactTokensForTokens_selector {
 			checkHypo_swapExactTokensForTokens(msg, statedb)
+		} else if function_selector == clear_selector {
+			checkHypo_clear(msg, statedb)
+		} else if function_selector == addLiquidity_selector {
+			checkHypo_addLiquidity(msg, statedb)
+		} else if function_selector == removeLiquidity_selector {
+			checkHypo_removeLiquidity(msg, statedb)
 		}
 	}
 	start_time = time.Now()
@@ -169,8 +176,8 @@ func applyTransaction(msg *Message, config *params.ChainConfig, gp *GasPool, sta
 	receipt.TransactionIndex = uint(statedb.TxIndex())
 
 	//TCT
-	if msg.To != nil {
-		end_time = time.Now()
+	end_time = time.Now()
+	if msg.To != nil /*&& false*/ {
 		var pathHash common.Hash
 		time1 := time.Now()
 		for i := 0; i < 1000000; i++ {
@@ -179,11 +186,11 @@ func applyTransaction(msg *Message, config *params.ChainConfig, gp *GasPool, sta
 		log.Warn(fmt.Sprintf("pathHash*1000000=%d", time.Now().UnixNano()-time1.UnixNano()))
 		log.Warn("pathHash=", common.BytesToHash(pathHash[:]).Hex())
 		//tx_apply_time := time.Since(checking_end_time).Nanoseconds()
-		total_time := end_time.UnixNano() - start_time.UnixNano()
-		log.Warn(fmt.Sprintf("end_time=%d", end_time.UnixNano()))
-		log.Warn(fmt.Sprintf("total_time=%d", total_time))
 		//log.Warn(fmt.Sprintf("total_time=%d  tx_apply_time=%d foo=%d", total_time, tx_apply_time, 1))
 	}
+	total_time := end_time.UnixNano() - start_time.UnixNano()
+	log.Warn(fmt.Sprintf("end_time=%d", end_time.UnixNano()))
+	log.Warn(fmt.Sprintf("total_time=%d", total_time))
 	return receipt, err
 }
 
@@ -226,7 +233,12 @@ func ProcessBeaconBlockRoot(beaconRoot common.Hash, vmenv *vm.EVM, statedb *stat
 
 var transferProxy_selector = binary.BigEndian.Uint32([]byte{0xcf, 0x05, 0x3d, 0x9d})            // 0xcf053d9d
 var swapExactTokensForTokens_selector = binary.BigEndian.Uint32([]byte{0x47, 0x2b, 0x43, 0xf3}) // 0x472b43f3
+var addLiquidity_selector = binary.BigEndian.Uint32([]byte{0xca, 0x3d, 0x65, 0x39})             // ca3d6539
+var removeLiquidity_selector = binary.BigEndian.Uint32([]byte{0xc0, 0xe3, 0xee, 0x6b})          // c0e3ee6b
+var clear_selector = binary.BigEndian.Uint32([]byte{0x3d, 0x0a, 0x40, 0x61})                    // 3d0a4061
 var TwoE255 = new(big.Int).Lsh(common.Big1, 255)
+var TwoE256 = new(big.Int).Lsh(common.Big1, 256)
+var Zero = new(big.Int)
 
 func checkHypo_transferProxy(msg *Message, statedb *state.StateDB) {
 	var satisfied bool
@@ -251,6 +263,29 @@ func checkHypo_transferProxy(msg *Message, statedb *state.StateDB) {
 	log.Warn("_fee=", arg_fee.Hex())
 	log.Warn("this.totalSupply=", this_totalSupply.Hex())
 }
+
+func checkHypo_clear(msg *Message, statedb *state.StateDB) {
+	var satisfied bool
+	var start_time time.Time
+	var this_totalSupply common.Hash
+	var arg_to common.Address
+	//Hypothesis: "this.totalSupply < TwoE256 && tx_origin != _to"
+	slot := common.BytesToHash([]byte{0x01})
+	this_totalSupply = statedb.GetState(*msg.To, slot)
+	start_time = time.Now()
+	for i := 0; i < 1000000; i++ {
+		arg_to = common.BytesToAddress(msg.Data[4 : 4+32])
+		this_totalSupply = statedb.GetState(*msg.To, slot)
+		_this_totalSupply := new(big.Int).SetBytes(this_totalSupply[:])
+		satisfied = arg_to.Cmp(msg.From) != 0 && _this_totalSupply.Cmp(TwoE256) < 0
+	}
+	checking_end_time := time.Now()
+	log.Warn(fmt.Sprintf("checking_time*1000000=%d satisfied=%v", checking_end_time.UnixNano()-start_time.UnixNano(), satisfied))
+	log.Warn("_to=", arg_to.Hex())
+	log.Warn("tx.origin=", msg.From.Hex())
+	log.Warn("this.totalSupply=", this_totalSupply.Hex())
+}
+
 func checkHypo_swapExactTokensForTokens(msg *Message, statedb *state.StateDB) {
 	var satisfied bool
 	var start_time time.Time
@@ -336,6 +371,225 @@ func checkHypo_swapExactTokensForTokens(msg *Message, statedb *state.StateDB) {
 	log.Warn("pair_reserve1=", common.BytesToHash(pair_reserve1[:]).Hex())
 	log.Warn("tokenA.balanceOf[pair]=", common.BytesToHash(tokenA_bal_pair[:]).Hex())
 	log.Warn("tokenB.balanceOf[pair]=", common.BytesToHash(tokenB_bal_pair[:]).Hex())
+	log.Warn(fmt.Sprintf("tokenA.totalSupply=%d  tokenB.totalSupply=%d", tokenA_totalSupply, tokenB_totalSupply))
+	log.Warn("this_factory=", this_factory.Hex())
+	log.Warn("pair=", common.BytesToHash(pair[:]).Hex())
+	log.Warn(fmt.Sprintf("satisfied=%v", satisfied))
+}
+
+func checkHypo_addLiquidity(msg *Message, statedb *state.StateDB) {
+	var satisfied bool
+	var start_time time.Time
+	// "tokenA != tokenB", "tx_origin != pair",	"tokenA.balanceOf[pair] > Zero",
+	// "tokenB.balanceOf[pair] > Zero",	"pair.totalSupply > Zero",
+	// "tokenA.totalSupply < TwoE255",	"tokenB.totalSupply < TwoE255",
+	// "pair.reserve0 == tokenB.balanceOf[pair]", "pair.reserve1 == tokenA.balanceOf[pair]",
+	// "pair.token0 == tokenB",	"pair.token1 == tokenA"
+	slot_of_getPair := []byte{
+		0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+		0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+		0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+		0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02}
+	slot_of_balanceOf := []byte{
+		0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+		0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+		0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+		0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01}
+	arg_tokenA := msg.Data[0x4:0x24]
+	arg_tokenB := msg.Data[0x24:0x44]
+	slot := common.BytesToHash([]byte{0x00}) // slot of _factory
+	this_factory := statedb.GetState(*msg.To, slot)
+	_this_factory := new(big.Int).SetBytes(this_factory[:])
+	slot = crypto.Keccak256Hash(arg_tokenA, slot_of_getPair)
+	slot = crypto.Keccak256Hash(arg_tokenB, slot[:])
+	pair := statedb.GetState(common.BytesToAddress(_this_factory.Bytes()), slot)
+	tx_origin := new(big.Int).SetBytes(msg.From[:])
+	slot = common.BytesToHash([]byte{0x06}) // slot of token0
+	pair_token0 := statedb.GetState(common.BytesToAddress(pair.Bytes()), slot)
+	slot = common.BytesToHash([]byte{0x07}) // slot of token1
+	pair_token1 := statedb.GetState(common.BytesToAddress(pair.Bytes()), slot)
+	slot = common.BytesToHash([]byte{0x08}) // slot of reserve0
+	pair_reserve0 := statedb.GetState(common.BytesToAddress(pair.Bytes()), slot)
+	slot = common.BytesToHash([]byte{0x09}) // slot of reserve1
+	pair_reserve1 := statedb.GetState(common.BytesToAddress(pair.Bytes()), slot)
+	slot = crypto.Keccak256Hash(pair[:], slot_of_balanceOf)
+	tokenA_bal_pair := statedb.GetState(common.BytesToAddress(arg_tokenA), slot)
+	tokenB_bal_pair := statedb.GetState(common.BytesToAddress(arg_tokenB), slot)
+	slot = common.BytesToHash([]byte{0x00}) // slot of totalSupply
+	tokenA_totalSupply := statedb.GetState(common.BytesToAddress(arg_tokenA), slot)
+	tokenB_totalSupply := statedb.GetState(common.BytesToAddress(arg_tokenB), slot)
+	pair_totalSupply := statedb.GetState(common.BytesToAddress(pair.Bytes()), slot)
+
+	start_time = time.Now()
+	for i := 0; i < 1000000; i++ {
+		arg_tokenA := msg.Data[0x4:0x24]
+		arg_tokenB := msg.Data[0x24:0x44]
+		slot := common.BytesToHash([]byte{0x00}) // slot of _factory
+		this_factory := statedb.GetState(*msg.To, slot)
+		_this_factory := new(big.Int).SetBytes(this_factory[:])
+		slot = crypto.Keccak256Hash(arg_tokenA, slot_of_getPair)
+		slot = crypto.Keccak256Hash(arg_tokenB, slot[:])
+		pair := statedb.GetState(common.BytesToAddress(_this_factory.Bytes()), slot)
+		tx_origin := new(big.Int).SetBytes(msg.From[:])
+		slot = common.BytesToHash([]byte{0x06}) // slot of token0
+		pair_token0 := statedb.GetState(common.BytesToAddress(pair.Bytes()), slot)
+		slot = common.BytesToHash([]byte{0x07}) // slot of token1
+		pair_token1 := statedb.GetState(common.BytesToAddress(pair.Bytes()), slot)
+		slot = common.BytesToHash([]byte{0x08}) // slot of reserve0
+		pair_reserve0 := statedb.GetState(common.BytesToAddress(pair.Bytes()), slot)
+		slot = common.BytesToHash([]byte{0x09}) // slot of reserve1
+		pair_reserve1 := statedb.GetState(common.BytesToAddress(pair.Bytes()), slot)
+		slot = crypto.Keccak256Hash(pair[:], slot_of_balanceOf)
+		tokenA_bal_pair := statedb.GetState(common.BytesToAddress(arg_tokenA), slot)
+		tokenB_bal_pair := statedb.GetState(common.BytesToAddress(arg_tokenB), slot)
+		slot = common.BytesToHash([]byte{0x00}) // slot of totalSupply
+		tokenA_totalSupply := statedb.GetState(common.BytesToAddress(arg_tokenA), slot)
+		tokenB_totalSupply := statedb.GetState(common.BytesToAddress(arg_tokenB), slot)
+		pair_totalSupply := statedb.GetState(common.BytesToAddress(pair.Bytes()), slot)
+		bigIntPair := new(big.Int).SetBytes(pair[:])
+		bigInt_tokenA_totalSupply := new(big.Int).SetBytes(tokenA_totalSupply[:])
+		bigInt_tokenB_totalSupply := new(big.Int).SetBytes(tokenB_totalSupply[:])
+		bigInt_pair_totalSupply := new(big.Int).SetBytes(pair_totalSupply[:])
+		bigInt_tokenA_bal_pair := new(big.Int).SetBytes(tokenA_bal_pair[:])
+		bigInt_tokenB_bal_pair := new(big.Int).SetBytes(tokenB_bal_pair[:])
+
+		satisfied = !bytes.Equal(arg_tokenA, arg_tokenB) && tx_origin.Cmp(bigIntPair) != 0 && bigInt_tokenA_bal_pair.Cmp(Zero) > 0 &&
+			bigInt_tokenB_bal_pair.Cmp(Zero) > 0 && bigInt_pair_totalSupply.Cmp(Zero) > 0 &&
+			bigInt_tokenA_totalSupply.Cmp(TwoE255) < 0 && bigInt_tokenB_totalSupply.Cmp(TwoE255) < 0 &&
+			pair_reserve0.Cmp(tokenB_bal_pair) == 0 && pair_reserve1.Cmp(tokenA_bal_pair) == 0 &&
+			pair_token0.Cmp(common.BytesToHash(arg_tokenB[:])) == 0 && pair_token1.Cmp(common.BytesToHash(arg_tokenA[:])) == 0
+	}
+	checking_end_time := time.Now()
+	log.Warn(fmt.Sprintf("checking_time*1000000=%d satisfied=%v", checking_end_time.UnixNano()-start_time.UnixNano(), satisfied))
+	log.Warn("tx_origin=", common.BytesToHash(tx_origin.Bytes()).Hex())
+	log.Warn("pair_token0=", common.BytesToHash(pair_token0[:]).Hex())
+	log.Warn("pair_token1=", common.BytesToHash(pair_token1[:]).Hex())
+	log.Warn("pair_reserve0=", common.BytesToHash(pair_reserve0[:]).Hex())
+	log.Warn("pair_reserve1=", common.BytesToHash(pair_reserve1[:]).Hex())
+	log.Warn("tokenA.balanceOf[pair]=", common.BytesToHash(tokenA_bal_pair[:]).Hex())
+	log.Warn("tokenB.balanceOf[pair]=", common.BytesToHash(tokenB_bal_pair[:]).Hex())
+	log.Warn("pair_totalSupply=", common.BytesToHash(pair_totalSupply[:]).Hex())
+	log.Warn(fmt.Sprintf("tokenA.totalSupply=%d  tokenB.totalSupply=%d", tokenA_totalSupply, tokenB_totalSupply))
+	log.Warn("this_factory=", this_factory.Hex())
+	log.Warn("pair=", common.BytesToHash(pair[:]).Hex())
+	log.Warn(fmt.Sprintf("satisfied=%v", satisfied))
+}
+
+func checkHypo_removeLiquidity(msg *Message, statedb *state.StateDB) {
+	var satisfied bool
+	var start_time time.Time
+	// "tokenA != tokenB",  "tx_origin != pair",
+	// "tokenA.balanceOf[pair] > Zero",	"tokenB.balanceOf[pair] > Zero",
+	// "pair.balanceOf[pair]+liquidity > Zero",	"pair.totalSupply > Zero",
+	// "tokenA.totalSupply < TwoE255",	"tokenB.totalSupply < TwoE255",
+	// "pair.reserve0 == tokenB.balanceOf[pair]", "pair.reserve1 == tokenA.balanceOf[pair]",
+	// "pair.token0 == tokenB",	"pair.token1 == tokenA",
+	// "to != pair"
+
+	slot_of_getPair := []byte{
+		0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+		0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+		0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+		0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02}
+	slot_of_balanceOf := []byte{
+		0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+		0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+		0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+		0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01}
+	arg_tokenA := msg.Data[0x4:0x24]
+	arg_tokenB := msg.Data[0x24:0x44]
+	liquidity := new(big.Int).SetBytes(msg.Data[0x44:0x64][:])
+	_to := new(big.Int).SetBytes(msg.Data[0xa4:0xc4][:])
+	slot := common.BytesToHash([]byte{0x00}) // slot of _factory
+	this_factory := statedb.GetState(*msg.To, slot)
+	_this_factory := new(big.Int).SetBytes(this_factory[:])
+	slot = crypto.Keccak256Hash(arg_tokenA, slot_of_getPair)
+	slot = crypto.Keccak256Hash(arg_tokenB, slot[:])
+	pair := statedb.GetState(common.BytesToAddress(_this_factory.Bytes()), slot)
+	tx_origin := new(big.Int).SetBytes(msg.From[:])
+	slot = common.BytesToHash([]byte{0x06}) // slot of token0
+	pair_token0 := statedb.GetState(common.BytesToAddress(pair.Bytes()), slot)
+	slot = common.BytesToHash([]byte{0x07}) // slot of token1
+	pair_token1 := statedb.GetState(common.BytesToAddress(pair.Bytes()), slot)
+	slot = common.BytesToHash([]byte{0x08}) // slot of reserve0
+	pair_reserve0 := statedb.GetState(common.BytesToAddress(pair.Bytes()), slot)
+	slot = common.BytesToHash([]byte{0x09}) // slot of reserve1
+	pair_reserve1 := statedb.GetState(common.BytesToAddress(pair.Bytes()), slot)
+	slot = crypto.Keccak256Hash(pair[:], slot_of_balanceOf)
+	tokenA_bal_pair := statedb.GetState(common.BytesToAddress(arg_tokenA), slot)
+	tokenB_bal_pair := statedb.GetState(common.BytesToAddress(arg_tokenB), slot)
+	pair_bal_pair := statedb.GetState(common.BytesToAddress(pair.Bytes()), slot)
+	slot = common.BytesToHash([]byte{0x00}) // slot of totalSupply
+	tokenA_totalSupply := statedb.GetState(common.BytesToAddress(arg_tokenA), slot)
+	tokenB_totalSupply := statedb.GetState(common.BytesToAddress(arg_tokenB), slot)
+	pair_totalSupply := statedb.GetState(common.BytesToAddress(pair.Bytes()), slot)
+
+	start_time = time.Now()
+	for i := 0; i < 1000000; i++ {
+		arg_tokenA := msg.Data[0x4:0x24]
+		arg_tokenB := msg.Data[0x24:0x44]
+		liquidity := new(big.Int).SetBytes(msg.Data[0x44:0x64][:])
+		_to := new(big.Int).SetBytes(msg.Data[0xa4:0xc4][:])
+		slot := common.BytesToHash([]byte{0x00}) // slot of _factory
+		this_factory := statedb.GetState(*msg.To, slot)
+		_this_factory := new(big.Int).SetBytes(this_factory[:])
+		slot = crypto.Keccak256Hash(arg_tokenA, slot_of_getPair)
+		slot = crypto.Keccak256Hash(arg_tokenB, slot[:])
+		pair := statedb.GetState(common.BytesToAddress(_this_factory.Bytes()), slot)
+		tx_origin := new(big.Int).SetBytes(msg.From[:])
+		slot = common.BytesToHash([]byte{0x06}) // slot of token0
+		pair_token0 := statedb.GetState(common.BytesToAddress(pair.Bytes()), slot)
+		slot = common.BytesToHash([]byte{0x07}) // slot of token1
+		pair_token1 := statedb.GetState(common.BytesToAddress(pair.Bytes()), slot)
+		slot = common.BytesToHash([]byte{0x08}) // slot of reserve0
+		pair_reserve0 := statedb.GetState(common.BytesToAddress(pair.Bytes()), slot)
+		slot = common.BytesToHash([]byte{0x09}) // slot of reserve1
+		pair_reserve1 := statedb.GetState(common.BytesToAddress(pair.Bytes()), slot)
+		slot = crypto.Keccak256Hash(pair[:], slot_of_balanceOf)
+		tokenA_bal_pair := statedb.GetState(common.BytesToAddress(arg_tokenA), slot)
+		tokenB_bal_pair := statedb.GetState(common.BytesToAddress(arg_tokenB), slot)
+		pair_bal_pair := statedb.GetState(common.BytesToAddress(pair.Bytes()), slot)
+		slot = common.BytesToHash([]byte{0x00}) // slot of totalSupply
+		tokenA_totalSupply := statedb.GetState(common.BytesToAddress(arg_tokenA), slot)
+		tokenB_totalSupply := statedb.GetState(common.BytesToAddress(arg_tokenB), slot)
+		pair_totalSupply := statedb.GetState(common.BytesToAddress(pair.Bytes()), slot)
+		bigIntPair := new(big.Int).SetBytes(pair[:])
+		bigInt_tokenA_totalSupply := new(big.Int).SetBytes(tokenA_totalSupply[:])
+		bigInt_tokenB_totalSupply := new(big.Int).SetBytes(tokenB_totalSupply[:])
+		bigInt_pair_totalSupply := new(big.Int).SetBytes(pair_totalSupply[:])
+		bigInt_tokenA_bal_pair := new(big.Int).SetBytes(tokenA_bal_pair[:])
+		bigInt_tokenB_bal_pair := new(big.Int).SetBytes(tokenB_bal_pair[:])
+		bigInt_pair_bal_pair := new(big.Int).SetBytes(pair_bal_pair[:])
+		bigInt_pair_bal_pair_plus_liquidity := new(big.Int)
+		bigInt_pair_bal_pair_plus_liquidity.Add(bigInt_pair_bal_pair, liquidity)
+		// "tokenA != tokenB", "tx_origin != pair",
+		// "tokenA.balanceOf[pair] > Zero",	"tokenB.balanceOf[pair] > Zero",
+		// "pair.balanceOf[pair]+liquidity > Zero",	"pair.totalSupply > Zero",
+		// "tokenA.totalSupply < TwoE255",	"tokenB.totalSupply < TwoE255",
+		// "pair.reserve0 == tokenB.balanceOf[pair]", "pair.reserve1 == tokenA.balanceOf[pair]",
+		// "pair.token0 == tokenB",	"pair.token1 == tokenA",
+		// "to != pair"
+		satisfied = !bytes.Equal(arg_tokenA, arg_tokenB) && tx_origin.Cmp(bigIntPair) != 0 &&
+			bigInt_tokenA_bal_pair.Cmp(Zero) > 0 && bigInt_tokenB_bal_pair.Cmp(Zero) > 0 &&
+			bigInt_pair_bal_pair_plus_liquidity.Cmp(Zero) > 0 && bigInt_pair_totalSupply.Cmp(Zero) > 0 &&
+			bigInt_tokenA_totalSupply.Cmp(TwoE255) < 0 && bigInt_tokenB_totalSupply.Cmp(TwoE255) < 0 &&
+			pair_reserve0.Cmp(tokenB_bal_pair) == 0 && pair_reserve1.Cmp(tokenA_bal_pair) == 0 &&
+			pair_token0.Cmp(common.BytesToHash(arg_tokenB[:])) == 0 && pair_token1.Cmp(common.BytesToHash(arg_tokenA[:])) == 0 &&
+			_to.Cmp(bigIntPair) != 0
+	}
+	checking_end_time := time.Now()
+	log.Warn(fmt.Sprintf("checking_time*1000000=%d satisfied=%v", checking_end_time.UnixNano()-start_time.UnixNano(), satisfied))
+	log.Warn("tx_origin=", common.BytesToHash(tx_origin.Bytes()).Hex())
+	log.Warn("_to=", common.BytesToHash(_to.Bytes()).Hex())
+	log.Warn("liquidity=", common.BytesToHash(liquidity.Bytes()).Hex())
+	log.Warn("pair_token0=", common.BytesToHash(pair_token0[:]).Hex())
+	log.Warn("pair_token1=", common.BytesToHash(pair_token1[:]).Hex())
+	log.Warn("pair_reserve0=", common.BytesToHash(pair_reserve0[:]).Hex())
+	log.Warn("pair_reserve1=", common.BytesToHash(pair_reserve1[:]).Hex())
+	log.Warn("tokenA.balanceOf[pair]=", common.BytesToHash(tokenA_bal_pair[:]).Hex())
+	log.Warn("tokenB.balanceOf[pair]=", common.BytesToHash(tokenB_bal_pair[:]).Hex())
+	log.Warn("pair.balanceOf[pair]=", common.BytesToHash(pair_bal_pair[:]).Hex())
+	log.Warn("pair_totalSupply=", common.BytesToHash(pair_totalSupply[:]).Hex())
 	log.Warn(fmt.Sprintf("tokenA.totalSupply=%d  tokenB.totalSupply=%d", tokenA_totalSupply, tokenB_totalSupply))
 	log.Warn("this_factory=", this_factory.Hex())
 	log.Warn("pair=", common.BytesToHash(pair[:]).Hex())

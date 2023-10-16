@@ -127,6 +127,16 @@ func applyTransaction(msg *Message, config *params.ChainConfig, gp *GasPool, sta
 			checkHypo_removeLiquidity(msg, statedb)
 		}
 	}
+
+	// TCT: get hypothesis given hypoHash
+	// example like this: hypoHash := common.Hash{0x1}
+	hypoHash := tx.HypoHash // transaction carries the hash
+	hypothesis, err := retrieveHypoHash(hypoHash)
+	if err != nil {
+		log.Warn("The hypothesis does not find given ", hypoHash)
+	}
+	fmt.Println("hypothesis is ", hypothesis)
+
 	start_time = time.Now()
 	log.Warn(fmt.Sprintf("start_time=%d", start_time.UnixNano()))
 
@@ -229,8 +239,7 @@ func ProcessBeaconBlockRoot(beaconRoot common.Hash, vmenv *vm.EVM, statedb *stat
 	statedb.Finalise(true)
 }
 
-/*  TCT  */
-
+/*  TCT: get value of particular variable with interacting contract */
 var transferProxy_selector = binary.BigEndian.Uint32([]byte{0xcf, 0x05, 0x3d, 0x9d})            // 0xcf053d9d
 var swapExactTokensForTokens_selector = binary.BigEndian.Uint32([]byte{0x47, 0x2b, 0x43, 0xf3}) // 0x472b43f3
 var addLiquidity_selector = binary.BigEndian.Uint32([]byte{0xca, 0x3d, 0x65, 0x39})             // ca3d6539
@@ -375,6 +384,40 @@ func checkHypo_swapExactTokensForTokens(msg *Message, statedb *state.StateDB) {
 	log.Warn("this_factory=", this_factory.Hex())
 	log.Warn("pair=", common.BytesToHash(pair[:]).Hex())
 	log.Warn(fmt.Sprintf("satisfied=%v", satisfied))
+}
+
+func retrieveHypoHash(hypoHash common.Hash) ([]byte, error) {
+	// TODO: might use IPFS to get the hypothesis given hash
+	// set a temporary hash set here
+	hypoHashset := map[common.Hash][]byte{
+		common.Hash{0x1}: []byte(`tokenA != tokenB,
+								tx_origin != pair,
+								tokenA.balanceOf[pair] > Zero,
+								tokenB.balanceOf[pair] > Zero,
+								pair.totalSupply > Zero,
+								tokenA.totalSupply < TwoE255,
+								tokenB.totalSupply < TwoE255,
+								pair.reserve0 == tokenB.balanceOf[pair],
+								pair.reserve1 == tokenA.balanceOf[pair],
+								pair.token0 == tokenB,
+								pair.token1 == tokenA`), // theorem_addLiquidity.json
+		common.Hash{0x2}: []byte(`Zero <= _value,
+								_value < TwoE255,
+								Zero <= _fee,
+								_fee < TwoE255,
+								totalSupply < TwoE255`), // theorem_integerOverflow.json
+	}
+
+	// Retrieve the value from the map
+	value, exists := hypoHashset[hypoHash]
+	if !exists {
+		// If the value does not exist, return an error
+		log.Error("Hypothesis not found for hash %x", hypoHash)
+		return nil, fmt.Errorf("Hypothesis not found for hash %x", hypoHash)
+	}
+
+	// If the value exists, return it
+	return value, nil
 }
 
 func checkHypo_addLiquidity(msg *Message, statedb *state.StateDB) {
